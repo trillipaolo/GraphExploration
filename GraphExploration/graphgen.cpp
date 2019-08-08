@@ -1,5 +1,7 @@
 #include "stdafx.h"
 
+void generateGraphs();
+
 //int main(int argc, char* argv[]) {
 //	generateGraphs();
 //	return 0;
