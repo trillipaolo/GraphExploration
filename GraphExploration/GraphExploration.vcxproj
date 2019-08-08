@@ -135,6 +135,12 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="ERgraphBig.txt" />
+    <Text Include="ERgraphSmall.txt" />
+    <Text Include="RMATgraphBig.txt" />
+    <Text Include="RMATgraphSmall.txt" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

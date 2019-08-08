@@ -39,4 +39,18 @@
       <Filter>File di intestazione</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="ERgraphBig.txt">
+      <Filter>File di risorse</Filter>
+    </Text>
+    <Text Include="ERgraphSmall.txt">
+      <Filter>File di risorse</Filter>
+    </Text>
+    <Text Include="RMATgraphBig.txt">
+      <Filter>File di risorse</Filter>
+    </Text>
+    <Text Include="RMATgraphSmall.txt">
+      <Filter>File di risorse</Filter>
+    </Text>
+  </ItemGroup>
 </Project>

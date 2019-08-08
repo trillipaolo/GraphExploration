@@ -1,6 +1,11 @@
 #include "stdafx.h"
 
-int main(int argc, char* argv[]) {
+//int main(int argc, char* argv[]) {
+//	generateGraphs();
+//	return 0;
+//}
+
+void generateGraphs(){
 	const int n_nodes = 120000;
 	const int n_edges = 2560000;
 
@@ -37,6 +42,4 @@ int main(int argc, char* argv[]) {
 	printf("Saving RMAT big graph.\n");
 	TSnap::SaveEdgeList(Gd, "RMATgraphBig.txt");
 	printf("Done 4 of 4.\n");
-
-	return 0;
 }
