@@ -4,9 +4,9 @@ int main(int argc, char* argv[]) {
 	const int n_nodes = 120000;
 	const int n_edges = 2560000;
 
-	const float a = 0.45;
-	const float b = 0.25;
-	const float c = 0.15;
+	const double a = 0.45;
+	const double b = 0.25;
+	const double c = 0.15;
  
 	TInt::Rnd.PutSeed(0); // initialize random seed
 	PUNGraph G;
@@ -29,13 +29,13 @@ int main(int argc, char* argv[]) {
 	printf("Generating RMAT small graph.\n");
 	Gd = TSnap::GenRMat(n_nodes/100, n_edges/100, a, b, c);
 	printf("Saving RMAT small graph.\n");
-	TSnap::SaveEdgeList(G, "RMATgraphSmall.txt");
+	TSnap::SaveEdgeList(Gd, "RMATgraphSmall.txt");
 	printf("Done 3 of 4.\n");
 
 	printf("Generating RMAT big graph.\n");
 	Gd = TSnap::GenRMat(n_nodes, n_edges, a, b, c);
 	printf("Saving RMAT big graph.\n");
-	TSnap::SaveEdgeList(G, "RMATgraphBig.txt");
+	TSnap::SaveEdgeList(Gd, "RMATgraphBig.txt");
 	printf("Done 4 of 4.\n");
 
 	return 0;

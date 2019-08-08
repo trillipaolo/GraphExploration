@@ -125,6 +125,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="graphgen.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Snap.cpp" />
     <ClCompile Include="stdafx.cpp" />
