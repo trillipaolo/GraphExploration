@@ -2,8 +2,10 @@
 
 #include <fstream>
 #include <set>
+#include <chrono>
 
 using namespace std;
+using namespace std::chrono;
 
 short int* levelSynchronousSequentialBFS(bool* graph, int nodes);
 void plotLevelTable(short int* lev, int nodes);
@@ -20,7 +22,12 @@ int main(int argc, char* argv[]) {
 
 	printGraph(graph);
 
+	auto start = high_resolution_clock::now();
 	short int* lev = levelSynchronousSequentialBFS(graph, nodes);
+	auto stop = chrono::high_resolution_clock::now();
+	auto duration = duration_cast<microseconds>(stop - start);
+	printf("Sequential BFS: %d ms\n", duration);
+
 
 	plotLevelTable(lev, nodes);
 
