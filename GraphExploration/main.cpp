@@ -3,7 +3,13 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <set>
 
+using namespace std;
+
+short int* levelSynchronousSequentialBFS(bool* graph, int nodes);
+void plotLevelTable(short int* lev, int nodes);
+set<int> nextNodes(bool* graph, int node, int nodes);
 bool* importGraph(const char* path, const bool undirected);
 void printGraph(bool* graph);
 int charsToInt(char chars[], int length);
@@ -16,21 +22,107 @@ int main(int argc, char* argv[]) {
 
 	printGraph(graph);
 
+	short int* lev = levelSynchronousSequentialBFS(graph, nodes);
+
+	plotLevelTable(lev, nodes);
+
 	return 0;
 }
 
-//int* levelSynchronousSequentialBFS(TUNGraph graph) {
-//	const int nodes = graph.GetNodes();
-//	int* output = new int[nodes];
-//	TInt curr = 0;
-//	output[0] = curr;
-//	for (int i = 0; i < nodes; i++) {
-//		curr = 
-//	}
-//}
+short int* levelSynchronousSequentialBFS(bool* graph, int nodes) {
+	/*procedure BFS(r:Node)
+	V = C = 0;; N = root frg.Visited, Current, and Next set
+	r.lev = level = 0
+	repeat
+		C = N
+		for Node c in C do.in parallel
+			for Node n in Nbr(c) do.in parallel
+				if n not in V then
+					N = N + n; V = V + n
+					n.lev = level + 1
+		level++
+	until N = 0;*/
+
+	
+	set<int> visited;
+	set<int> current;
+	set<int> next;
+	set<int>::iterator itr;
+	set<int>::iterator itr2;
+
+	int level = 0;
+	short int* lev = new short int[nodes];
+	for (int i = 0; i < nodes; i++) {
+		lev[i] = -1;
+	}
+
+	// root is node 0
+	visited.insert(0);
+	next.insert(0);
+	lev[0] = 0;
+
+	while (!next.empty()) {
+		current.clear();
+		current = next;
+		next.clear();
+
+		for (itr = current.begin(); itr != current.end(); ++itr) {
+
+			set<int> neighbours = nextNodes(graph, *itr, nodes);
+			for (itr2 = neighbours.begin(); itr2 != neighbours.end(); ++itr2) {
+				if (!visited.count(*itr2)) {
+					next.insert(*itr2);
+					visited.insert(*itr2);
+					lev[*itr2] = level + 1;
+				}
+			}
+		}
+		level++;
+	}
+
+	return lev;
+}
+
+void plotLevelTable(short int* lev, int nodes) {
+	int maxLev = -1;
+	for (int i = 0; i < nodes; i++) {
+		if (lev[i] > maxLev) {
+			maxLev = lev[i];
+		}
+	}
+
+	int* count = new int[maxLev + 2];
+	for (int i = 0; i < maxLev + 2; i++) {
+		count[i] = 0;
+	}
+	for (int i = 0; i < nodes; i++) {
+		count[lev[i] + 1]++;
+	}
+
+	printf("________________________________\n");
+	printf("\nLevel\tNodes\tPercentage\n");
+	printf("________________________________\n\n");
+	for (int i = 1; i < maxLev + 2; i++) {
+		printf("%d\t%d\t%.2f %%\n", i - 1, count[i], (float)((count[i]) * 100) / nodes);
+	}
+	printf("________________________________\n\n");
+	printf("Total:\t%d\t%.2f %%\n", nodes - count[0], (float)((nodes - count[0]) * 100) / nodes);
+	printf("________________________________\n\n");
+}
+
+set<int> nextNodes(bool* graph, int node, int nodes) {
+	set<int> next;
+	for (int i = 0; i < nodes; i++) {
+		if (graph[node * nodes + i]) {
+			next.insert(i);
+		}
+	}
+
+	return next;
+}
 
 bool* importGraph(const char* path, const bool undirected) {
-	std::ifstream inFile;
+	ifstream inFile;
 	inFile.open(path);
 	if (!inFile) {
 		printf("Unable to open file: %s not found.", path);
