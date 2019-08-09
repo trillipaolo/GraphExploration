@@ -1,5 +1,3 @@
-#include "stdafx.h"
-
 #include <fstream>
 #include <set>
 #include <chrono>
@@ -17,16 +15,15 @@ int charsToInt(char chars[], int length);
 int nodes = 0;
 
 int main(int argc, char* argv[]) {
+	bool* graph = importGraph("ERgraphBig.txt", true);
 
-	bool* graph = importGraph("ERgraphTest.txt", true);
-
-	printGraph(graph);
+	//printGraph(graph);
 
 	auto start = high_resolution_clock::now();
 	short int* lev = levelSynchronousSequentialBFS(graph, nodes);
 	auto stop = chrono::high_resolution_clock::now();
-	auto duration = duration_cast<microseconds>(stop - start);
-	printf("Sequential BFS: %d ms\n", duration);
+	auto duration = duration_cast<milliseconds>(stop - start);
+	printf("Sequential BFS: %.2d us\n", duration);
 
 
 	plotLevelTable(lev, nodes);
@@ -116,9 +113,11 @@ void plotLevelTable(short int* lev, int nodes) {
 }
 
 set<int> nextNodes(bool* graph, int node, int nodes) {
+	long long int ln = (long long int)node;
+	long long int lns = (long long int)nodes;
 	set<int> next;
-	for (int i = 0; i < nodes; i++) {
-		if (graph[node * nodes + i]) {
+	for (long long int i = 0; i < nodes; i++) {
+		if (graph[ln * lns + i]) {
 			next.insert(i);
 		}
 	}
@@ -144,23 +143,26 @@ bool* importGraph(const char* path, const bool undirected) {
 	// Read nodes and save it as global variable
 	inFile.getline(curr, 256, ' ');
 	nodes = charsToInt(curr, 256);
+	long long int ln = (long long int)nodes;
 
 	// Arrive at edges
 	inFile.getline(curr, 256, '#');
 	inFile.getline(curr, 256, '\n');
 
 	// Initialize graph without edges
-	bool* graph = new bool[nodes*nodes];
+	bool* graph = new bool[ln * ln];
 	for (int i = 0; i < nodes * nodes; i++) {
 		graph[i] = false;
 	}
 
 	// Read edges
+	long long int sn;
+	long long int en;
 	while (!inFile.getline(curr, 256, '\t').eof()) {
+		sn = charsToInt(curr, 256);
 
-		int sn = charsToInt(curr, 256);
 		inFile.getline(curr, 256, '\n');
-		int en = charsToInt(curr, 256);
+		en = charsToInt(curr, 256);
 
 		graph[sn * nodes + en] = true;
 		if (undirected) {
