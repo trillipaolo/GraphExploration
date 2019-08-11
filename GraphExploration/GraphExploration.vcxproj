@@ -132,9 +132,11 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="ERgraphBig.txt" />
+    <Text Include="ERgraphMedium.txt" />
     <Text Include="ERgraphSmall.txt" />
     <Text Include="ERgraphTest.txt" />
     <Text Include="RMATgraphBig.txt" />
+    <Text Include="RMATgraphMedium.txt" />
     <Text Include="RMATgraphSmall.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

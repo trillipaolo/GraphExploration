@@ -49,5 +49,11 @@
     <Text Include="RMATgraphSmall.txt">
       <Filter>File di risorse</Filter>
     </Text>
+    <Text Include="ERgraphMedium.txt">
+      <Filter>File di risorse</Filter>
+    </Text>
+    <Text Include="RMATgraphMedium.txt">
+      <Filter>File di risorse</Filter>
+    </Text>
   </ItemGroup>
 </Project>
