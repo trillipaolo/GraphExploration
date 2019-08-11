@@ -1,4 +1,5 @@
 #include <fstream>
+#include <queue>
 #include <set>
 #include <chrono>
 
@@ -7,7 +8,8 @@ using namespace std::chrono;
 
 short int* levelSynchronousSequentialBFS(bool* graph, int nodes);
 void plotLevelTable(short int* lev, int nodes);
-set<int> nextNodes(bool* graph, int node, int nodes);
+set<int> nextNodesSet(bool* graph, int node, int nodes);
+queue<int> nextNodesQueue(bool* graph, int node, int nodes);
 bool* importGraph(const char* path, const bool undirected);
 void printGraph(bool* graph);
 int charsToInt(char chars[], int length);
@@ -15,7 +17,7 @@ int charsToInt(char chars[], int length);
 int nodes = 0;
 
 int main(int argc, char* argv[]) {
-	bool* graph = importGraph("ERgraphBig.txt", true);
+	bool* graph = importGraph("ERgraphSmall.txt", true);
 
 	//printGraph(graph);
 
@@ -31,6 +33,60 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
+//short int* levelSynchronousSequentialBFS(bool* graph, int nodes) {
+//	/*procedure BFS(r:Node)
+//	V = C = 0;; N = root frg.Visited, Current, and Next set
+//	r.lev = level = 0
+//	repeat
+//		C = N
+//		for Node c in C do.in parallel
+//			for Node n in Nbr(c) do.in parallel
+//				if n not in V then
+//					N = N + n; V = V + n
+//					n.lev = level + 1
+//		level++
+//	until N = 0;*/
+//
+//	
+//	set<int> visited;
+//	set<int> current;
+//	set<int> next;
+//	set<int>::iterator itr;
+//	set<int>::iterator itr2;
+//
+//	int level = 0;
+//	short int* lev = new short int[nodes];
+//	for (int i = 0; i < nodes; i++) {
+//		lev[i] = -1;
+//	}
+//
+//	// root is node 0
+//	visited.insert(0);
+//	next.insert(0);
+//	lev[0] = 0;
+//
+//	while (!next.empty()) {
+//		current.clear();
+//		current = next;
+//		next.clear();
+//
+//		for (itr = current.begin(); itr != current.end(); ++itr) {
+//
+//			set<int> neighbours = nextNodesSet(graph, *itr, nodes);
+//			for (itr2 = neighbours.begin(); itr2 != neighbours.end(); ++itr2) {
+//				if (!visited.count(*itr2)) {
+//					next.insert(*itr2);
+//					visited.insert(*itr2);
+//					lev[*itr2] = level + 1;
+//				}
+//			}
+//		}
+//		level++;
+//	}
+//
+//	return lev;
+//}
+
 short int* levelSynchronousSequentialBFS(bool* graph, int nodes) {
 	/*procedure BFS(r:Node)
 	V = C = 0;; N = root frg.Visited, Current, and Next set
@@ -45,12 +101,14 @@ short int* levelSynchronousSequentialBFS(bool* graph, int nodes) {
 		level++
 	until N = 0;*/
 
-	
-	set<int> visited;
-	set<int> current;
-	set<int> next;
-	set<int>::iterator itr;
-	set<int>::iterator itr2;
+
+	bool* visited = new bool[nodes];
+	for (int i = 0; i < nodes; i++) {
+		visited[i] = false;
+	}
+	queue<int> current;
+	queue<int> next;
+	queue<int> neighbours;
 
 	int level = 0;
 	short int* lev = new short int[nodes];
@@ -59,25 +117,33 @@ short int* levelSynchronousSequentialBFS(bool* graph, int nodes) {
 	}
 
 	// root is node 0
-	visited.insert(0);
-	next.insert(0);
+	visited[0] = true;
+	next.push(0);
 	lev[0] = 0;
 
+	int curr;
+	int neigh;
 	while (!next.empty()) {
-		current.clear();
-		current = next;
-		next.clear();
+		// current = queue<int>();		clean a queue
+		swap(current,next);
 
-		for (itr = current.begin(); itr != current.end(); ++itr) {
+		while (!current.empty()) {
+			curr = current.front();
 
-			set<int> neighbours = nextNodes(graph, *itr, nodes);
-			for (itr2 = neighbours.begin(); itr2 != neighbours.end(); ++itr2) {
-				if (!visited.count(*itr2)) {
-					next.insert(*itr2);
-					visited.insert(*itr2);
-					lev[*itr2] = level + 1;
+			neighbours = nextNodesQueue(graph, curr, nodes);
+			while (!neighbours.empty()) {
+				neigh = neighbours.front();
+
+				if (!visited[neigh]) {
+					next.push(neigh);
+					visited[neigh] = true;
+					lev[neigh] = level + 1;
 				}
+
+				neighbours.pop();
 			}
+
+			current.pop();
 		}
 		level++;
 	}
@@ -112,7 +178,20 @@ void plotLevelTable(short int* lev, int nodes) {
 	printf("________________________________\n\n");
 }
 
-set<int> nextNodes(bool* graph, int node, int nodes) {
+queue<int> nextNodesQueue(bool* graph, int node, int nodes) {
+	long long int ln = (long long int)node;
+	long long int lns = (long long int)nodes;
+	queue<int> next;
+	for (long long int i = 0; i < nodes; i++) {
+		if (graph[ln * lns + i]) {
+			next.push(i);
+		}
+	}
+
+	return next;
+}
+
+set<int> nextNodesSet(bool* graph, int node, int nodes) {
 	long long int ln = (long long int)node;
 	long long int lns = (long long int)nodes;
 	set<int> next;
