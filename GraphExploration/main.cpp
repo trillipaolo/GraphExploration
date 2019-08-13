@@ -8,6 +8,7 @@
 using namespace std;
 using namespace std::chrono;
 
+void initializeVisitedLev(bool* visited, short int* lev, int nodes, int thread);
 short int* levelSynchronousSequentialBFSbasic(bool* graph, int nodes);
 short int* levelSynchronousSequentialBFS(bool* graph, int nodes);
 short int* levelSynchronousParallelBFS(bool* graph, int nodes, int n_max_threads);
@@ -20,11 +21,12 @@ bool* importGraph(const char* path, const bool undirected);
 void printGraph(bool* graph);
 int charsToInt(char chars[], int length);
 
+int concurentThreadsSupported;
 int nodes = 0;
 mutex mtx;
 
 int main(int argc, char* argv[]) {
-	int concurentThreadsSupported = thread::hardware_concurrency();
+	concurentThreadsSupported = thread::hardware_concurrency();
 
 	printf("MAX_THREADS: %d\n", concurentThreadsSupported);
 
@@ -32,20 +34,20 @@ int main(int argc, char* argv[]) {
 	time_point<steady_clock> stop;
 	milliseconds duration;
 
-	bool* graph = importGraph("RMATgraphMedium.txt", false);
+	bool* graph = importGraph("RMATgraphBig.txt", false);
 	short int* lev;
 
 	//printGraph(graph);
 
-	printf("\nStart Sequential BFS normal\n");
-	start = high_resolution_clock::now();
-	lev = levelSynchronousSequentialBFSbasic(graph, nodes);
-	stop = chrono::high_resolution_clock::now();
-	printf("Done Sequential BFS normal\n");
-	duration = duration_cast<milliseconds>(stop - start);
-	printf("Sequential BFS basic: %.2d us\n", duration);
+	//printf("\nStart Sequential BFS normal\n");
+	//start = high_resolution_clock::now();
+	//lev = levelSynchronousSequentialBFSbasic(graph, nodes);
+	//stop = chrono::high_resolution_clock::now();
+	//printf("Done Sequential BFS normal\n");
+	//duration = duration_cast<milliseconds>(stop - start);
+	//printf("Sequential BFS basic: %.2d us\n", duration);
 
-	plotLevelTable(lev, nodes);
+	//plotLevelTable(lev, nodes);
 
 	printf("\nStart Sequential BFS optimized\n");
 	start = high_resolution_clock::now();
@@ -125,6 +127,18 @@ short int* levelSynchronousSequentialBFSbasic(bool* graph, int nodes) {
 	return lev;
 }
 
+void initializeVisitedLev(bool* visited, short int* lev, int nodes, int thread) {
+	int start = (nodes * thread) / concurentThreadsSupported;
+	int end = (nodes * (thread + 1)) / concurentThreadsSupported;
+	if (end > nodes) {
+		end = nodes;
+	}
+	for (int i = start; i < end; i++) {
+		visited[i] = false;
+		lev[i] = -1;
+	}
+}
+
 short int* levelSynchronousSequentialBFS(bool* graph, int nodes) {
 	/*procedure BFS(r:Node)
 	V = C = 0;; N = root frg.Visited, Current, and Next set
@@ -139,20 +153,17 @@ short int* levelSynchronousSequentialBFS(bool* graph, int nodes) {
 		level++
 	until N = 0;*/
 
-
+	int level = 0;
+	short int* lev = new short int[nodes];
 	bool* visited = new bool[nodes];
 	for (int i = 0; i < nodes; i++) {
 		visited[i] = false;
+		lev[i] = -1;
 	}
+
 	queue<int> current;
 	queue<int> next;
 	queue<int> neighbours;
-
-	int level = 0;
-	short int* lev = new short int[nodes];
-	for (int i = 0; i < nodes; i++) {
-		lev[i] = -1;
-	}
 
 	// root is node 0
 	visited[0] = true;
@@ -189,20 +200,57 @@ short int* levelSynchronousSequentialBFS(bool* graph, int nodes) {
 	return lev;
 }
 
+short int* BFS_read(bool* graph, int nodes, int n_max_threads) {
+	//BFS_Read(G: Graph, r : Node) {
+	//	Bitmap V;
+	//	Bool fin[threads];
+	//	V.set(r.id);
+	//	int level = 0; r.lev = level;
+	//	bool finished = false;
+	//	while (!finished) {
+	//		fork;
+	//		fin[tid] = true;
+	//		foreach(c: G.Nodes.partition(tid)) {
+	//			if (c.lev != level) continue;
+	//			foreach(n: c.nbrs) {
+	//				if (!V.isSet(n.id)) { // test and test-and-set
+	//					if (V.atomicSet(n.id)) {
+	//						n.lev = level + 1;
+	//						fin[tid] = false;
+	//					}
+	//				}
+	//			}
+	//		}
+	//		join;
+	//		finished = logicalAnd(fin, threads);
+	//		level++;
+	//	}
+	//}
+
+	return NULL;
+}
+
 short int* levelSynchronousParallelBFS(bool* graph, int nodes, int n_max_threads) {
 
-	bool* visited = new bool[nodes];
-	for (int i = 0; i < nodes; i++) {
-		visited[i] = false;
-	}
 	queue<int> current;
 	queue<int> next;
 	queue<thread> threads;
 
 	int level = 0;
 	short int* lev = new short int[nodes];
-	for (int i = 0; i < nodes; i++) {
-		lev[i] = -1;
+	bool* visited = new bool[nodes];
+	//#pragma omp parallel for
+	//	for (int i = 0; i < nodes; i++) {
+	//		visited[i] = false;
+	//		lev[i] = -1;
+	//	}
+
+	thread* at = new thread[concurentThreadsSupported];
+	for (int i = 0; i < concurentThreadsSupported; i++) {
+		at[i] = thread(initializeVisitedLev, visited, lev, nodes, i);
+	}
+	for (int i = 0; i < concurentThreadsSupported; i++) {
+		at[i].join();
 	}
 
 	// root is node 0
