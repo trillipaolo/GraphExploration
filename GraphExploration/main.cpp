@@ -11,7 +11,10 @@ using namespace std::chrono;
 void initializeVisitedLev(bool* visited, short int* lev, int nodes, int thread);
 short int* levelSynchronousSequentialBFSbasic(bool* graph, int nodes);
 short int* levelSynchronousSequentialBFS(bool* graph, int nodes);
-short int* levelSynchronousParallelBFS(bool* graph, int nodes, int n_max_threads);
+short int* queueBasedBFS(bool* graph, int nodes, int n_max_threads);
+short int* readBasedBFS(bool* graph, int nodes, int n_max_threads);
+void readBFSarray(int num, bool* graph, int nodes, short int* lev, int level, bool& cond);
+void readBFScurrent(bool* graph, int nodes, int curr, short int* lev, int level);
 void lSPBFSlevel(bool* graph, int nodes, int curr, bool* visited, queue<int> &next, short int* lev, int level);
 void lSPBFSneighbours(int neigh, bool* visited, queue<int> &next, short int* lev, int level);
 void plotLevelTable(short int* lev, int nodes);
@@ -34,7 +37,7 @@ int main(int argc, char* argv[]) {
 	time_point<steady_clock> stop;
 	milliseconds duration;
 
-	bool* graph = importGraph("RMATgraphBig.txt", false);
+	bool* graph = importGraph("ERgraphBig.txt", true);
 	short int* lev;
 
 	//printGraph(graph);
@@ -49,24 +52,35 @@ int main(int argc, char* argv[]) {
 
 	//plotLevelTable(lev, nodes);
 
-	printf("\nStart Sequential BFS optimized\n");
+	//printf("\nStart Sequential BFS optimized\n");
+	//start = high_resolution_clock::now();
+	//lev = levelSynchronousSequentialBFS(graph, nodes);
+	//stop = chrono::high_resolution_clock::now();
+	//printf("Done Sequential BFS optimized\n");
+	//duration = duration_cast<milliseconds>(stop - start);
+	//printf("Sequential BFS optimized: %.2d us\n", duration);
+	//
+	//plotLevelTable(lev, nodes);
+
+
+	printf("\nStart Parallel BFS read\n");
 	start = high_resolution_clock::now();
-	lev = levelSynchronousSequentialBFS(graph, nodes);
+	lev = readBasedBFS(graph, nodes, concurentThreadsSupported);
 	stop = chrono::high_resolution_clock::now();
-	printf("Done Sequential BFS optimized\n");
+	printf("Done Parallel BFS read\n");
 	duration = duration_cast<milliseconds>(stop - start);
-	printf("Sequential BFS optimized: %.2d us\n", duration);
-	
+	printf("Parallel BFS read: %.2d us\n", duration);
+
 	plotLevelTable(lev, nodes);
 
 
-	printf("\nStart Parallel BFS optimized\n");
+	printf("\nStart Parallel BFS queue\n");
 	start = high_resolution_clock::now();
-	lev = levelSynchronousParallelBFS(graph, nodes, concurentThreadsSupported);
+	lev = queueBasedBFS(graph, nodes, concurentThreadsSupported);
 	stop = chrono::high_resolution_clock::now();
-	printf("Done Parallel BFS optimized\n");
+	printf("Done Parallel BFS queue\n");
 	duration = duration_cast<milliseconds>(stop - start);
-	printf("Parallel BFS normal: %.2d us\n", duration);
+	printf("Parallel BFS queue: %.2d us\n", duration);
 
 	plotLevelTable(lev, nodes);
 
@@ -127,9 +141,9 @@ short int* levelSynchronousSequentialBFSbasic(bool* graph, int nodes) {
 	return lev;
 }
 
-void initializeVisitedLev(bool* visited, short int* lev, int nodes, int thread) {
-	int start = (nodes * thread) / concurentThreadsSupported;
-	int end = (nodes * (thread + 1)) / concurentThreadsSupported;
+void initializeVisitedLev(bool* visited, short int* lev, int nodes, int num) {
+	int start = (nodes * num) / concurentThreadsSupported;
+	int end = (nodes * (num + 1)) / concurentThreadsSupported;
 	if (end > nodes) {
 		end = nodes;
 	}
@@ -200,7 +214,7 @@ short int* levelSynchronousSequentialBFS(bool* graph, int nodes) {
 	return lev;
 }
 
-short int* BFS_read(bool* graph, int nodes, int n_max_threads) {
+short int* readBasedBFS(bool* graph, int nodes, int n_max_threads) {
 	//BFS_Read(G: Graph, r : Node) {
 	//	Bitmap V;
 	//	Bool fin[threads];
@@ -211,7 +225,8 @@ short int* BFS_read(bool* graph, int nodes, int n_max_threads) {
 	//		fork;
 	//		fin[tid] = true;
 	//		foreach(c: G.Nodes.partition(tid)) {
-	//			if (c.lev != level) continue;
+	//			if (c.lev != level)		// if it is not current, go to the next node
+	//				continue;
 	//			foreach(n: c.nbrs) {
 	//				if (!V.isSet(n.id)) { // test and test-and-set
 	//					if (V.atomicSet(n.id)) {
@@ -227,10 +242,92 @@ short int* BFS_read(bool* graph, int nodes, int n_max_threads) {
 	//	}
 	//}
 
-	return NULL;
+	queue<thread> threads;
+	
+	int level = 0;
+	short int* lev = new short int[nodes];
+	bool* visited = new bool[nodes];
+
+	thread* at = new thread[concurentThreadsSupported];
+	for (int i = 0; i < concurentThreadsSupported; i++) {
+		at[i] = thread(initializeVisitedLev, visited, lev, nodes, i);
+	}
+	for (int i = 0; i < concurentThreadsSupported; i++) {
+		at[i].join();
+	}
+
+	// root is node 0
+	visited[0] = true;
+	lev[0] = 0;
+
+	bool cond = true;
+	while (cond) {
+		cond = false;
+		for (int i = 0; i < concurentThreadsSupported; i++) {
+			at[i] = thread(readBFSarray, i, graph, nodes, lev, level, ref(cond));
+		}
+		for (int i = 0; i < concurentThreadsSupported; i++) {
+			at[i].join();
+		}
+
+		//for (int i = 0; i < nodes; i++) {
+		//	if (lev[i] == level) {
+		//		cond = true;
+		//		threads.push(thread(readBFScurrent, graph, nodes, i, lev, level));
+		//	}
+		//}
+
+		//while (!threads.empty()) {
+		//	threads.front().join();
+		//	threads.pop();
+		//}
+
+		level++;
+	}
+
+	return lev;
 }
 
-short int* levelSynchronousParallelBFS(bool* graph, int nodes, int n_max_threads) {
+void readBFSarray(int num, bool* graph, int nodes, short int* lev, int level, bool &cond) {
+	int start = (nodes * num) / concurentThreadsSupported;
+	int end = (nodes * (num + 1)) / concurentThreadsSupported;
+	if (end > nodes) {
+		end = nodes;
+	}
+
+	queue<thread> threads;
+
+	for (int i = start; i < end; i++) {
+		if (lev[i] == level) {
+			cond = true;
+			threads.push(thread(readBFScurrent, graph, nodes, i, lev, level));
+		}
+	}
+		
+	while (!threads.empty()) {
+		threads.front().join();
+		threads.pop();
+	}
+}
+
+void readBFScurrent(bool* graph, int nodes, int curr, short int* lev, int level) {
+	queue<int> neighbours;
+	neighbours = nextNodesQueue(graph, curr, nodes);
+
+	int neigh;
+	while (!neighbours.empty()) {
+
+		neigh = neighbours.front();
+
+		if (lev[neigh] == -1) {
+			lev[neigh] = level + 1;
+		}
+
+		neighbours.pop();
+	}
+}
+
+short int* queueBasedBFS(bool* graph, int nodes, int n_max_threads) {
 
 	queue<int> current;
 	queue<int> next;
