@@ -4,11 +4,11 @@
 #include <chrono>
 #include <thread>
 #include <mutex>
-#include <omp.h>
 
 using namespace std;
 using namespace std::chrono;
 
+//USE vector instead of queue for next, so it can be partitioned for thread concurrency
 
 // SHARED MEMORY //
 
@@ -470,6 +470,8 @@ void plotLevelTable(short int* lev, int nodes) {
 }
 
 queue<int> nextNodesQueue(bool* graph, int node, int nodes) {
+	// TODO can be parallelized
+
 	long long int ln = (long long int)node;
 	long long int lns = (long long int)nodes;
 	queue<int> next;
@@ -535,9 +537,9 @@ bool* importGraph(const char* path, const bool undirected) {
 		inFile.getline(curr, 256, '\n');
 		en = charsToInt(curr, 256);
 
-		graph[sn * shared_nodes + en] = true;
+		graph[sn * ln + en] = true;
 		if (undirected) {
-			graph[en * shared_nodes + sn] = true;
+			graph[en * ln + sn] = true;
 		}
 	}
 
@@ -590,13 +592,6 @@ int charsToInt(char chars[], int length) {
 // MAIN
 
 int main(int argc, char* argv[]) {
-
-	omp_set_dynamic(0);
-
-	#pragma omp parallel num_threads(5)
-		{
-			printf("Hello World... from thread = %d\n", omp_get_thread_num());
-		}
 
 	concurentThreadsSupported = thread::hardware_concurrency();
 
