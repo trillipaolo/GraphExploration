@@ -4,6 +4,7 @@
 #include <chrono>
 #include <thread>
 #include <mutex>
+#include <omp.h>
 
 using namespace std;
 using namespace std::chrono;
@@ -31,8 +32,6 @@ int shared_level = 0;
 
 // FUNCTIONS IDENTIFIER
 
-short int* levelSynchronousSequentialBFSbasic();
-
 short int* sequentialBasedBFS();
 
 short int* readBasedBFS();
@@ -40,13 +39,14 @@ void readBFSarray(int num);
 void readBFScurrent(int curr);
 
 short int* queueBasedBFS();
-void queueBFScurrent(int curr, bool* visited, queue<int>& next);
-void queueBFSneighbours(int neigh, bool* visited, queue<int>& next);
+void queueBFSarray(int num, bool* visited, vector<int>& next);
+void queueBFScurrent(int curr, bool* visited, vector<int>& next);
+void queueBFSneighbours(int neigh, bool* visited, vector<int>& next);
 
 void initializeVisitedLev(int num, bool* visited, short int* lev);
-void plotLevelTable(short int* lev, int nodes);
-queue<int> nextNodesQueue(bool* graph, int node, int nodes);
-set<int> nextNodesSet(bool* graph, int node, int nodes);
+void plotLevelTable(short int* lev, int n_nodes);
+queue<int> nextNodesQueue(bool* graph, int node, int n_nodes);
+vector<int> nextNodesVector(bool* graph, int node, int nodes);
 bool* importGraph(const char* path, const bool undirected);
 void printGraph(bool* graph, int nodes);
 int charsToInt(char chars[], int length);
@@ -106,60 +106,6 @@ short int* hybridBFS() {
 			break;
 		}
 	}
-}
-
-short int* levelSynchronousSequentialBFSbasic() {
-	/*procedure BFS(r:Node)
-	V = C = 0;; N = root frg.Visited, Current, and Next set
-	r.lev = level = 0
-	repeat
-		C = N
-		for Node c in C do.in parallel
-			for Node n in Nbr(c) do.in parallel
-				if n not in V then
-					N = N + n; V = V + n
-					n.lev = level + 1
-		level++
-	until N = 0;*/
-
-	
-	set<int> visited;
-	set<int> current;
-	set<int> next;
-	set<int>::iterator itr;
-	set<int>::iterator itr2;
-
-	int level = 0;
-	short int* lev = new short int[shared_nodes];
-	for (int i = 0; i < shared_nodes; i++) {
-		lev[i] = -1;
-	}
-
-	// root is node 0
-	visited.insert(0);
-	next.insert(0);
-	lev[0] = 0;
-
-	while (!next.empty()) {
-		current.clear();
-		current = next;
-		next.clear();
-
-		for (itr = current.begin(); itr != current.end(); ++itr) {
-
-			set<int> neighbours = nextNodesSet(shared_graph, *itr, shared_nodes);
-			for (itr2 = neighbours.begin(); itr2 != neighbours.end(); ++itr2) {
-				if (!visited.count(*itr2)) {
-					next.insert(*itr2);
-					visited.insert(*itr2);
-					lev[*itr2] = level + 1;
-				}
-			}
-		}
-		level++;
-	}
-
-	return lev;
 }
 
 short int* sequentialBasedBFS() {
@@ -256,8 +202,6 @@ short int* readBasedBFS() {
 	//		level++;
 	//	}
 	//}
-
-	queue<thread> threads;
 	
 	shared_level = 0;
 	bool* visited = new bool[shared_nodes];
@@ -283,18 +227,6 @@ short int* readBasedBFS() {
 		for (int i = 0; i < concurentThreadsSupported; i++) {
 			at[i].join();
 		}
-
-		//for (int i = 0; i < nodes; i++) {
-		//	if (lev[i] == level) {
-		//		cond = true;
-		//		threads.push(thread(readBFScurrent, graph, nodes, i, lev, level));
-		//	}
-		//}
-
-		//while (!threads.empty()) {
-		//	threads.front().join();
-		//	threads.pop();
-		//}
 
 		shared_level++;
 	}
@@ -346,8 +278,8 @@ void readBFScurrent(int curr) {
 
 short int* queueBasedBFS() {
 
-	queue<int> current;
-	queue<int> next;
+	vector<int> current;
+	vector<int> next;
 	queue<thread> threads;
 
 	shared_level = 0;
@@ -363,20 +295,21 @@ short int* queueBasedBFS() {
 
 	// root is node 0
 	visited[0] = true;
-	next.push(0);
+	next.push_back(0);
 	shared_lev[0] = 0;
 
 	int curr;
 	while (!next.empty()) {
-		swap(current, next);
+
+		current.swap(next);
 
 		while (!current.empty()) {
 
-			curr = current.front();
+			curr = current.back();
 
 			threads.push(thread(queueBFScurrent, curr, visited, ref(next)));
 
-			current.pop();
+			current.pop_back();
 		}
 
 		while (!threads.empty()) {
@@ -393,22 +326,22 @@ short int* queueBasedBFS() {
 	return shared_lev;
 }
 
-void queueBFScurrent(int curr, bool* visited, queue<int> &next) {
-	queue<int> neighbours;
+void queueBFScurrent(int curr, bool* visited, vector<int> &next) {
+	vector<int> neighbours;
 	queue<thread> threads;
 
 	int neigh;
 
-	neighbours = nextNodesQueue(shared_graph, curr, shared_nodes);
+	neighbours = nextNodesVector(shared_graph, curr, shared_nodes);
 	while (!neighbours.empty()) {
 
-		neigh = neighbours.front();
+		neigh = neighbours.back();
 
 		if (!visited[neigh]) {
 			threads.push(thread(queueBFSneighbours, neigh, visited, ref(next)));
 		}
 
-		neighbours.pop();
+		neighbours.pop_back();
 	}
 
 	while (!threads.empty()) {
@@ -417,13 +350,13 @@ void queueBFScurrent(int curr, bool* visited, queue<int> &next) {
 	}
 }
 
-void queueBFSneighbours(int neigh, bool* visited, queue<int> &next) {
+void queueBFSneighbours(int neigh, bool* visited, vector<int> &next) {
 	if (!visited[neigh]) {
 		visited[neigh] = true;
 		shared_lev[neigh] = shared_level + 1;
 
 		mtx.lock();
-		next.push(neigh);
+		next.push_back(neigh);
 		mtx.unlock();
 	}
 }
@@ -469,14 +402,14 @@ void plotLevelTable(short int* lev, int nodes) {
 	delete[] count;
 }
 
-queue<int> nextNodesQueue(bool* graph, int node, int nodes) {
+queue<int> nextNodesQueue(bool* graph, int node, int n_nodes) {
 	// TODO can be parallelized
 
 	long long int ln = (long long int)node;
-	long long int lns = (long long int)nodes;
+	long long int ln_ns = (long long int)n_nodes;
 	queue<int> next;
-	for (long long int i = 0; i < nodes; i++) {
-		if (graph[ln * lns + i]) {
+	for (long long int i = 0; i < ln_ns; i++) {
+		if (graph[ln * ln_ns + i]) {
 			next.push(i);
 		}
 	}
@@ -484,13 +417,15 @@ queue<int> nextNodesQueue(bool* graph, int node, int nodes) {
 	return next;
 }
 
-set<int> nextNodesSet(bool* graph, int node, int nodes) {
+vector<int> nextNodesVector(bool* graph, int node, int n_nodes) {
+	// TODO can be parallelized
+
 	long long int ln = (long long int)node;
-	long long int lns = (long long int)nodes;
-	set<int> next;
-	for (long long int i = 0; i < nodes; i++) {
-		if (graph[ln * lns + i]) {
-			next.insert(i);
+	long long int ln_ns = (long long int)n_nodes;
+	vector<int> next;
+	for (long long int i = 0; i < ln_ns; i++) {
+		if (graph[ln * ln_ns + i]) {
+			next.push_back(i);
 		}
 	}
 
@@ -593,6 +528,11 @@ int charsToInt(char chars[], int length) {
 
 int main(int argc, char* argv[]) {
 
+	#pragma omp parallel for
+	for (int i = 0; i < 16; i++) {
+		printf("Hello World... from thread = %d\n", omp_get_thread_num());
+	}
+
 	concurentThreadsSupported = thread::hardware_concurrency();
 
 	printf("MAX_THREADS: %d\n", concurentThreadsSupported);
@@ -601,55 +541,45 @@ int main(int argc, char* argv[]) {
 	time_point<steady_clock> stop;
 	milliseconds duration;
 
-	shared_graph = importGraph("ERgraphBig.txt", true);
+	shared_graph = importGraph("ERgraphMedium.txt", true);
 	shared_lev = new short int[shared_nodes];
 
-	////printGraph(shared_graph, shared_nodes);
-
-	////printf("\nStart Sequential BFS normal\n");
-	////start = high_resolution_clock::now();
-	////shared_lev = levelSynchronousSequentialBFSbasic();
-	////stop = chrono::high_resolution_clock::now();
-	////printf("Done Sequential BFS normal\n");
-	////duration = duration_cast<milliseconds>(stop - start);
-	////printf("Sequential BFS basic: %.2d us\n", duration);
-
-	////plotLevelTable(shared_lev, shared_nodes);
-
-	////printf("\nStart Sequential BFS optimized\n");
-	////start = high_resolution_clock::now();
-	////shared_lev = sequentialBasedBFS();
-	////stop = chrono::high_resolution_clock::now();
-	////printf("Done Sequential BFS optimized\n");
-	////duration = duration_cast<milliseconds>(stop - start);
-	////printf("Sequential BFS optimized: %.2d us\n", duration);
-
-	////plotLevelTable(shared_lev, shared_nodes);
-
-
-	//printf("\nStart Parallel BFS read\n");
-	//start = high_resolution_clock::now();
-	//shared_lev = readBasedBFS();
-	//stop = chrono::high_resolution_clock::now();
-	//printf("Done Parallel BFS read\n");
-	//duration = duration_cast<milliseconds>(stop - start);
-	//printf("Parallel BFS read: %.2d us\n", duration);
-
 	//plotLevelTable(shared_lev, shared_nodes);
 
+	printf("\nStart Sequential BFS optimized\n");
+	start = high_resolution_clock::now();
+	shared_lev = sequentialBasedBFS();
+	stop = chrono::high_resolution_clock::now();
+	printf("Done Sequential BFS optimized\n");
+	duration = duration_cast<milliseconds>(stop - start);
+	printf("Sequential BFS optimized: %.2d us\n", duration);
 
-	//printf("\nStart Parallel BFS queue\n");
-	//start = high_resolution_clock::now();
-	//shared_lev = queueBasedBFS();
-	//stop = chrono::high_resolution_clock::now();
-	//printf("Done Parallel BFS queue\n");
-	//duration = duration_cast<milliseconds>(stop - start);
-	//printf("Parallel BFS queue: %.2d us\n", duration);
+	plotLevelTable(shared_lev, shared_nodes);
 
-	//plotLevelTable(shared_lev, shared_nodes);
 
-	//delete[] shared_graph;
-	//delete[] shared_lev;
+	printf("\nStart Parallel BFS read\n");
+	start = high_resolution_clock::now();
+	shared_lev = readBasedBFS();
+	stop = chrono::high_resolution_clock::now();
+	printf("Done Parallel BFS read\n");
+	duration = duration_cast<milliseconds>(stop - start);
+	printf("Parallel BFS read: %.2d us\n", duration);
+
+	plotLevelTable(shared_lev, shared_nodes);
+
+
+	printf("\nStart Parallel BFS queue\n");
+	start = high_resolution_clock::now();
+	shared_lev = queueBasedBFS();
+	stop = chrono::high_resolution_clock::now();
+	printf("Done Parallel BFS queue\n");
+	duration = duration_cast<milliseconds>(stop - start);
+	printf("Parallel BFS queue: %.2d us\n", duration);
+
+	plotLevelTable(shared_lev, shared_nodes);
+
+	delete[] shared_graph;
+	delete[] shared_lev;
 
 	return 0;
 }
