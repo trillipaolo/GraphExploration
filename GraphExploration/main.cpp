@@ -5,14 +5,17 @@
 #include <mutex>
 #include <omp.h>
 
+
 using namespace std;
 using namespace std::chrono;
 
 enum state { SEQ, QUEUE, QUEUE_TO_READ, READ, READ_TO_QUEUE, END };
 
+
 // SHARED MEMORY //
 int concurentThreadsSupported;
 mutex mtx;
+
 int t1 = 64;
 int t2 = 262144;
 int t3 = 2048;
@@ -37,46 +40,204 @@ void printGraph(bool* graph, int nodes);
 int charsToInt(char chars[], int length);
 bool scanBool();
 
-// FUNCTIONS
+
+// FUNCTIONS //
 
 short int* hybridBFS(bool* graph, const int n_nodes, const int root) {
 	state nextState = SEQ;
+	bool exp = false;
 
 	int n_curr = 0;
 	int n_next = 0;
-	bool exp = false;
+
+	vector<int> current;
+	vector<int> next;
+
+	// Initialize visited[] and lev[]
+	short int level = 0;
+	bool* visited = new bool[n_nodes];
+	short int* lev = new short int[n_nodes];
+	#pragma omp parallel for
+	for (int i = 0; i < n_nodes; i++) {
+		visited[i] = false;
+		lev[i] = -1;
+	}
+
+	// initialize root node
+	visited[root] = true;
+	next.push_back(root);
+	n_next++;
+	lev[root] = 0;
 
 	bool cond = true;
 	while (cond) {
+		cond = false;
+		n_curr = n_next;
+		n_next = 0;
+
 		switch (nextState) {
+
+		// SEQUENTIAL //
 		case SEQ:
+			current.clear();
+			current.swap(next);
+
+			for (int i = 0; i < current.size(); i++) {
+				int curr = current.at(i);
+
+				vector<int> neighbours = nextNodesVector(graph, n_nodes, curr);
+
+				for (int j = 0; j < neighbours.size(); j++) {
+					int neigh = neighbours.at(j);
+
+					if (!visited[neigh]) {
+						next.push_back(neigh);
+						visited[neigh] = true;
+						lev[neigh] = level + 1;
+						cond = true;
+					}
+				}
+			}
+
+			n_next = next.size();
 
 			if (n_next > t1) {
 				nextState = QUEUE;
 			}
+
 			break;
 
+		// QUEUE //
 		case QUEUE:
+			current.clear();
+			current.swap(next);
+
+			#pragma omp parallel for
+			for (int i = 0; i < current.size(); i++) {
+				int curr = current.at(i);
+
+				vector<int> neighbours = nextNodesVector(graph, n_nodes, curr);
+
+				#pragma omp parallel for
+				for (int j = 0; j < neighbours.size(); j++) {
+					int neigh = neighbours.at(j);
+
+					if (!visited[neigh]) {
+						visited[neigh] = true;
+						lev[neigh] = level + 1;
+						cond = true;
+
+						#pragma omp critical (nextPush)
+						{
+							next.push_back(neigh);
+						}
+					}
+				}
+			}
+
+			n_next = next.size();
 
 			if (n_next > t2 || (n_next > alpha * n_curr)) {
 				nextState = QUEUE_TO_READ;
 				exp = n_next > alpha * n_curr;
 			}
+			else if (n_next < t1) {
+				nextState = SEQ;
+			}
 			break;
 
+		// QUEUE to READ
 		case QUEUE_TO_READ:
+			current.clear();
+			current.swap(next);
+
+			#pragma omp parallel for
+			for (int i = 0; i < current.size(); i++) {
+				int curr = current.at(i);
+
+				vector<int> neighbours = nextNodesVector(graph, n_nodes, curr);
+
+				#pragma omp parallel for
+				for (int j = 0; j < neighbours.size(); j++) {
+					int neigh = neighbours.at(j);
+
+					if (!visited[neigh]) {
+						visited[neigh] = true;
+						lev[neigh] = level + 1;
+						cond = true;
+
+						#pragma omp critical (nextPush)
+						{
+							n_next++;
+						}
+					}
+				}
+			}
 
 			nextState = READ;
 			break;
 
+		// READ //
 		case READ:
+			#pragma omp parallel for
+			for (int curr = 0; curr < n_nodes; curr++) {
+				if (lev[curr] == level) {
+
+					vector<int> neighbours = nextNodesVector(graph, n_nodes, curr);
+
+					#pragma omp parallel for
+					for (int j = 0; j < neighbours.size(); j++) {
+						int neigh = neighbours.at(j);
+
+						if (!visited[neigh]) {
+							visited[neigh] = true;
+							lev[neigh] = level + 1;
+							cond = true;
+
+							#pragma omp critical (nextPush)
+							{
+								n_next++;
+							}
+						}
+					}
+				}
+			}
 
 			if (n_next < t2 || (exp && (n_next < beta * n_curr))) {
 				nextState = READ_TO_QUEUE;
 			}
 			break;
 
+		// READ to QUEUE //
 		case READ_TO_QUEUE:
+
+			next.clear();
+
+			#pragma omp parallel for
+			for (int curr = 0; curr < n_nodes; curr++) {
+				if (lev[curr] == level) {
+
+					vector<int> neighbours = nextNodesVector(graph, n_nodes, curr);
+
+					#pragma omp parallel for
+					for (int j = 0; j < neighbours.size(); j++) {
+						int neigh = neighbours.at(j);
+
+						if (!visited[neigh]) {
+							visited[neigh] = true;
+							lev[neigh] = level + 1;
+							cond = true;
+
+							#pragma omp critical (nextPush)
+							{
+								next.push_back(neigh);
+							}
+						}
+					}
+				}
+			}
+
+			n_next = next.size();
 
 			if (n_next > t1) {
 				nextState = QUEUE;
@@ -90,9 +251,13 @@ short int* hybridBFS(bool* graph, const int n_nodes, const int root) {
 			printf("Default branch!\n");
 			break;
 		}
+
+		level++;
 	}
 
-	return NULL;
+	delete[] visited;
+
+	return lev;
 }
 
 short int* sequentialBasedBFS(bool* graph, const int n_nodes, const int root) {
@@ -202,32 +367,6 @@ short int* queueBasedBFS(bool* graph, const int n_nodes, const int root) {
 }
 
 short int* readBasedBFS(bool* graph, int n_nodes, int root) {
-	//BFS_Read(G: Graph, r : Node) {
-	//	Bitmap V;
-	//	Bool fin[threads];
-	//	V.set(r.id);
-	//	int level = 0; r.lev = level;
-	//	bool finished = false;
-	//	while (!finished) {
-	//		fork;
-	//		fin[tid] = true;
-	//		foreach(c: G.Nodes.partition(tid)) {
-	//			if (c.lev != level)		// if it is not current, go to the next node
-	//				continue;
-	//			foreach(n: c.nbrs) {
-	//				if (!V.isSet(n.id)) { // test and test-and-set
-	//					if (V.atomicSet(n.id)) {
-	//						n.lev = level + 1;
-	//						fin[tid] = false;
-	//					}
-	//				}
-	//			}
-	//		}
-	//		join;
-	//		finished = logicalAnd(fin, threads);
-	//		level++;
-	//	}
-	//}
 	
 	// Initialize visited[] and lev[]
 	short int level = 0;
@@ -363,6 +502,7 @@ bool* importGraph(const char* path, const bool undirected, int* n_nodes) {
 
 	// Initialize graph without edges
 	bool* graph = new bool[ln * ln];
+	#pragma omp parallel for
 	for (long long int i = 0; i < ln * ln; i++) {
 		graph[i] = false;
 	}
@@ -537,7 +677,7 @@ bool scanBool() {
 }
 
 
-// MAIN
+// MAIN //
 
 int main(int argc, char* argv[]) {
 	concurentThreadsSupported = thread::hardware_concurrency();
@@ -557,7 +697,7 @@ int main(int argc, char* argv[]) {
 	int n_nodes = -1;
 	printf("\nStart Importing Graph\n");
 	start = high_resolution_clock::now();
-	bool* graph = importGraphParallel("ERgraphBig.txt", true, &n_nodes);
+	bool* graph = importGraphParallel("RMATgraphBig.txt", false, &n_nodes);
 	stop = chrono::high_resolution_clock::now();
 	printf("Done Importing Graph\n");
 	duration = duration_cast<milliseconds>(stop - start);
@@ -601,6 +741,20 @@ int main(int argc, char* argv[]) {
 		printf("Done Parallel BFS read\n");
 		duration = duration_cast<milliseconds>(stop - start);
 		printf("Parallel BFS read: %d ms\n", (int)duration.count());
+
+		plotLevelTable(lev, n_nodes);
+
+		delete[] lev;
+
+
+		// Hybrid BFS
+		printf("\nStart Hybrid BFS read\n");
+		start = high_resolution_clock::now();
+		lev = hybridBFS(graph, n_nodes, root);
+		stop = chrono::high_resolution_clock::now();
+		printf("Done Hybrid BFS read\n");
+		duration = duration_cast<milliseconds>(stop - start);
+		printf("Hybrid BFS read: %d ms\n", (int)duration.count());
 
 		plotLevelTable(lev, n_nodes);
 
