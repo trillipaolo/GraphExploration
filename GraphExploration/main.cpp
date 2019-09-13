@@ -490,8 +490,7 @@ bool* importGraph(const char* path, const bool undirected, int* n_nodes) {
 	ifstream inFile;
 	inFile.open(path);
 	if (!inFile) {
-		printf("Unable to open file: %s not found.", path);
-		exit(1); // terminate with error
+		throw "File not Found!";
 	}
 
 	char curr[256];
@@ -541,8 +540,7 @@ bool* importGraphParallel(const char* path, const bool undirected, int* n_nodes)
 	ifstream inFile;
 	inFile.open(path);
 	if (!inFile) {
-		printf("Unable to open file: %s not found.", path);
-		exit(-1); // terminate with error
+		throw "File not Found!";
 	}
 
 	char curr[256];
@@ -699,86 +697,168 @@ bool scanBool() {
 // MAIN //
 
 int main(int argc, char* argv[]) {
-	concurentThreadsSupported = thread::hardware_concurrency();
+#pragma omp parallel
+	{
+		queue<int> temp;
+#pragma omp for
+		for (int i = 0; i < 32; i++) {
+			temp.push(i);
+		}
 
-
-	// For time computation
-	time_point<steady_clock> start;
-	time_point<steady_clock> stop;
-	milliseconds duration;
-
-
-	// Import the graph from file
-	const int root = 0;
-	short int* lev;
-	int n_nodes = -1;
-	printf("Start Importing Graph\n");
-	start = high_resolution_clock::now();
-	bool* graph = importGraphParallel("RMATgraphBig.txt", false, &n_nodes);
-	stop = chrono::high_resolution_clock::now();
-	printf("Done Importing Graph\n");
-	duration = duration_cast<milliseconds>(stop - start);
-	printf("Importing Graph: %d ms\n", (int)duration.count());
-	t2 = (int)max((double)t2, (double)n_nodes * 0.01);
-
-
-	// Hybrid BFS
-	printf("\nStart Hybrid BFS read\n");
-	start = high_resolution_clock::now();
-	lev = hybridBFS(graph, n_nodes, root);
-	stop = chrono::high_resolution_clock::now();
-	printf("Done Hybrid BFS read\n");
-	duration = duration_cast<milliseconds>(stop - start);
-	printf("Hybrid BFS read: %d ms\n", (int)duration.count());
-
-	plotLevelTable(lev, n_nodes);
-
-	delete[] lev;
-
-
-	// Sequential BFS
-	printf("\nStart Sequential BFS optimized\n");
-	start = high_resolution_clock::now();
-	lev = sequentialBasedBFS(graph, n_nodes, root);
-	stop = chrono::high_resolution_clock::now();
-	printf("Done Sequential BFS optimized\n");
-	duration = duration_cast<milliseconds>(stop - start);
-	printf("Sequential BFS optimized: %d ms\n", (int)duration.count());
-
-	plotLevelTable(lev, n_nodes);
-
-	delete[] lev;
-
-
-	// Queue Parallel BFS
-	printf("\nStart Parallel BFS queue\n");
-	start = high_resolution_clock::now();
-	lev = queueBasedBFS(graph, n_nodes, root);
-	stop = chrono::high_resolution_clock::now();
-	printf("Done Parallel BFS queue\n");
-	duration = duration_cast<milliseconds>(stop - start);
-	printf("Parallel BFS queue: %d ms\n", (int)duration.count());
-
-	plotLevelTable(lev, n_nodes);
-
-	delete[] lev;
-
-
-	// Read Parallel BFS
-	printf("\nStart Parallel BFS read\n");
-	start = high_resolution_clock::now();
-	lev = readBasedBFS(graph, n_nodes, root);
-	stop = chrono::high_resolution_clock::now();
-	printf("Done Parallel BFS read\n");
-	duration = duration_cast<milliseconds>(stop - start);
-	printf("Parallel BFS read: %d ms\n", (int)duration.count());
-
-	plotLevelTable(lev, n_nodes);
-
-	delete[] lev;
-
-
-	delete[] graph;
-
-	return 0;
+#pragma omp critical (main)
+		{
+			printf("Thread %d\n", omp_get_thread_num());
+			for (; !temp.empty(); temp.pop()) {
+				printf("%d ", temp.front());
+			}
+			printf("\n");
+		}
+	}
 }
+
+
+//int main(int argc, char* argv[]) {
+//	concurentThreadsSupported = thread::hardware_concurrency();
+//
+//	//printf("Decide which algorthm to run:\n");
+//	//printf(" - S: Sequential\n");
+//	//printf(" - Q: Queue\n");
+//	//printf(" - R: Read\n");
+//	//printf(" - H: Hybrid\n");
+//	//char algorithm;
+//	//do {
+//	//	scanf_s("%c", &algorithm, 1);
+//	//	if (algorithm >= 'a' && algorithm <= 'z') {
+//	//		algorithm = algorithm - 'a' + 'A';
+//	//	}
+//	//} while (algorithm != 'S' && algorithm != 'Q' && algorithm != 'R' && algorithm != 'H');
+//
+//	//printf("\nDecide how many runs: ");
+//	//int times;
+//	//do {
+//	//	string input;
+//	//	scanf_s("%s", &input, 10);
+//	//	times = atoi(input.c_str());
+//	//} while (times <= 0 || times > 50);
+//
+//
+//	// For time computation
+//	time_point<steady_clock> start;
+//	time_point<steady_clock> stop;
+//	milliseconds* duration = new milliseconds[10];
+//
+//	//bool pathFound;
+//	//string path;
+//	//const int root = 0;
+//	//short int* lev;
+//	//int n_nodes = -1;
+//	//bool* graph;
+//	//do {
+//	//	pathFound = true;
+//	//	printf("\nInsert the name of file's graph: ");
+//	//	scanf_s("%s", &path, 50);
+//	//	printf("The graph is undirected? ");
+//	//	bool undirected = scanBool();
+//	//	printf("Start Importing Graph\n");
+//	//	start = high_resolution_clock::now();
+//	//	try {
+//	//		graph = importGraphParallel(path.c_str(), false, &n_nodes);
+//	//	}
+//	//	catch (const char* msg) {
+//	//		pathFound = false;
+//	//		printf(msg);
+//	//	}
+//	//	stop = chrono::high_resolution_clock::now();
+//	//	printf("Done Importing Graph\n");
+//	//	duration[0] = duration_cast<milliseconds>(stop - start);
+//	//	printf("Importing Graph: %d ms\n", (int)duration[0].count());
+//	//	t2 = (int)max((double)t2, (double)n_nodes * 0.01);
+//	//} while (!pathFound);
+//
+//
+//	// Import the graph from file
+//	const int root = 0;
+//	short int* lev;
+//	int n_nodes = -1;
+//	printf("Start Importing Graph\n");
+//	start = high_resolution_clock::now();
+//	bool* graph = importGraphParallel("RMATgraphBig.txt", false, &n_nodes);
+//	stop = chrono::high_resolution_clock::now();
+//	printf("Done Importing Graph\n");
+//	duration[0] = duration_cast<milliseconds>(stop - start);
+//	printf("Importing Graph: %d ms\n", (int)duration[0].count());
+//	t2 = (int)max((double)t2, (double)n_nodes * 0.01);
+//
+//	for (int i = 0; i < 10; i++) {
+//		// Hybrid BFS
+//		printf("\nStart Hybrid BFS read\n");
+//		start = high_resolution_clock::now();
+//		lev = queueBasedBFS(graph, n_nodes, root);
+//		stop = chrono::high_resolution_clock::now();
+//		printf("Done Hybrid BFS read\n");
+//		duration[i] = duration_cast<milliseconds>(stop - start);
+//		printf("Hybrid BFS read: %d ms\n", (int)duration[i].count());
+//
+//		if (i == 0) {
+//			plotLevelTable(lev, n_nodes);
+//		}
+//
+//		delete[] lev;
+//	}
+//
+//	printf("Iteration\tTime\n");
+//	int mean = 0;
+//	for (int i = 0; i < 10; i++) {
+//		mean = mean + (int)duration[i].count();
+//		printf("%d\t%d\n", i, (int)duration[i].count());
+//	}
+//	mean = mean / 10;
+//	printf("--------------\nmean\t%d\n", mean);
+//
+//
+//	//// Sequential BFS
+//	//printf("\nStart Sequential BFS optimized\n");
+//	//start = high_resolution_clock::now();
+//	//lev = sequentialBasedBFS(graph, n_nodes, root);
+//	//stop = chrono::high_resolution_clock::now();
+//	//printf("Done Sequential BFS optimized\n");
+//	//duration = duration_cast<milliseconds>(stop - start);
+//	//printf("Sequential BFS optimized: %d ms\n", (int)duration.count());
+//
+//	//plotLevelTable(lev, n_nodes);
+//
+//	//delete[] lev;
+//
+//
+//	//// Queue Parallel BFS
+//	//printf("\nStart Parallel BFS queue\n");
+//	//start = high_resolution_clock::now();
+//	//lev = queueBasedBFS(graph, n_nodes, root);
+//	//stop = chrono::high_resolution_clock::now();
+//	//printf("Done Parallel BFS queue\n");
+//	//duration = duration_cast<milliseconds>(stop - start);
+//	//printf("Parallel BFS queue: %d ms\n", (int)duration.count());
+//
+//	//plotLevelTable(lev, n_nodes);
+//
+//	//delete[] lev;
+//
+//
+//	//// Read Parallel BFS
+//	//printf("\nStart Parallel BFS read\n");
+//	//start = high_resolution_clock::now();
+//	//lev = readBasedBFS(graph, n_nodes, root);
+//	//stop = chrono::high_resolution_clock::now();
+//	//printf("Done Parallel BFS read\n");
+//	//duration = duration_cast<milliseconds>(stop - start);
+//	//printf("Parallel BFS read: %d ms\n", (int)duration.count());
+//
+//	//plotLevelTable(lev, n_nodes);
+//
+//	//delete[] lev;
+//
+//
+//	delete[] graph;
+//
+//	return 0;
+//}
