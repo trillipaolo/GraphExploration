@@ -14,7 +14,6 @@ enum state { SEQ, QUEUE, QUEUE_TO_READ, READ, READ_TO_QUEUE, END };
 
 // SHARED MEMORY //
 int concurentThreadsSupported;
-omp_lock_t simple_lock;
 mutex mtx;
 
 int t1 = 64;
@@ -46,6 +45,9 @@ bool scanBool();
 // FUNCTIONS //
 
 short int* hybridBFS(bool* graph, const int n_nodes, const int root) {
+	omp_lock_t simple_lock;
+	omp_init_lock(&simple_lock);
+
 	state nextState = SEQ;
 	bool exp = false;
 
@@ -298,6 +300,8 @@ short int* hybridBFS(bool* graph, const int n_nodes, const int root) {
 
 	delete[] visited;
 
+	omp_destroy_lock(&simple_lock);
+
 	return lev;
 }
 
@@ -354,6 +358,8 @@ short int* sequentialBasedBFS(bool* graph, const int n_nodes, const int root) {
 }
 
 short int* queueBasedBFS(bool* graph, const int n_nodes, const int root) {
+	omp_lock_t simple_lock;
+	omp_init_lock(&simple_lock);
 
 	vector<int> current;
 	vector<int> next;
@@ -380,7 +386,7 @@ short int* queueBasedBFS(bool* graph, const int n_nodes, const int root) {
 
 		#pragma omp parallel
 		{
-			queue<int> private_queue;
+			queue<int> private_next;
 
 			#pragma omp for
 			for (int i = 0; i < current.size(); i++) {
@@ -395,13 +401,13 @@ short int* queueBasedBFS(bool* graph, const int n_nodes, const int root) {
 						visited[neigh] = true;
 						lev[neigh] = level + 1;
 
-						private_queue.push(neigh);
+						private_next.push(neigh);
 
-						if (private_queue.size() > queue_threshold) {
+						if (private_next.size() > queue_threshold) {
 							if (omp_test_lock(&simple_lock)) {
-								while (!private_queue.empty()) {
-									next.push_back(private_queue.front());
-									private_queue.pop();
+								while (!private_next.empty()) {
+									next.push_back(private_next.front());
+									private_next.pop();
 								}
 								omp_unset_lock(&simple_lock);
 							}
@@ -411,9 +417,9 @@ short int* queueBasedBFS(bool* graph, const int n_nodes, const int root) {
 			}
 
 			omp_set_lock(&simple_lock);
-			while (!private_queue.empty()) {
-				next.push_back(private_queue.front());
-				private_queue.pop();
+			while (!private_next.empty()) {
+				next.push_back(private_next.front());
+				private_next.pop();
 			}
 			omp_unset_lock(&simple_lock);
 		}
@@ -422,6 +428,8 @@ short int* queueBasedBFS(bool* graph, const int n_nodes, const int root) {
 	}
 
 	delete[] visited;
+
+	omp_destroy_lock(&simple_lock);
 
 	return lev;
 }
@@ -503,7 +511,6 @@ void plotLevelTable(short int* lev, int nodes) {
 }
 
 queue<int> nextNodesQueue(bool* graph, int n_nodes, int curr) {
-	// TODO can be parallelized
 
 	long long int lc = (long long int)curr;
 	long long int ln_ns = (long long int)n_nodes;
@@ -517,21 +524,61 @@ queue<int> nextNodesQueue(bool* graph, int n_nodes, int curr) {
 	return next;
 }
 
-vector<int> nextNodesVector(bool* graph, int n_nodes, int curr) {
+vector<int> nextNodesVector(bool* graph, int n_nodes, int curr)  {
 
 	long long int lc = (long long int)curr;
 	long long int ln_ns = (long long int)n_nodes;
 	vector<int> neighbours;
 
+
+	// WARNING: USE ONLY ONE METHOD BETWEEN LOCK AND PRIVATE QUEUE, COMMENT THE OTHER ONE
+
+	//// LOCK:
+	////	lighter version, in my case works better
+	omp_lock_t neigh_lock;
+	omp_init_lock(&neigh_lock);
 	#pragma omp parallel for
 	for (long long int i = 0; i < ln_ns; i++) {
 		if (graph[lc * ln_ns + i]) {
-			#pragma omp critical (neighboursPush)
-			{
-				neighbours.push_back((int)i);
-			}
+			omp_set_lock(&neigh_lock);
+			neighbours.push_back((int)i);
+			omp_unset_lock(&neigh_lock);
 		}
 	}
+	omp_destroy_lock(&neigh_lock);
+
+
+	//// PRIVATE QUEUE:
+	////		to not stop execution of ohter threads at every vector push_back
+	//omp_lock_t neigh_lock;
+	//omp_init_lock(&neigh_lock);
+	//#pragma omp parallel
+	//{
+	//	queue<int> private_neighbours;
+	//	#pragma omp for
+	//	for (long long int i = 0; i < ln_ns; i++) {
+	//		if (graph[lc * ln_ns + i]) {
+	//			private_neighbours.push((int)i);
+	//		}
+	//		if (private_neighbours.size() > queue_threshold) {
+	//			if (omp_test_lock(&neigh_lock)) {
+	//				while (!private_neighbours.empty()) {
+	//					neighbours.push_back(private_neighbours.front());
+	//					private_neighbours.pop();
+	//				}
+	//				omp_unset_lock(&neigh_lock);
+	//			}
+	//		}
+	//	}
+	//	omp_set_lock(&neigh_lock);
+	//	while (!private_neighbours.empty()) {
+	//		neighbours.push_back(private_neighbours.front());
+	//		private_neighbours.pop();
+	//	}
+	//	omp_unset_lock(&neigh_lock);
+	//}
+	//omp_destroy_lock(&neigh_lock);
+
 
 	return neighbours;
 }
@@ -747,7 +794,6 @@ bool scanBool() {
 
 int main(int argc, char* argv[]) {
 	concurentThreadsSupported = thread::hardware_concurrency();
-	omp_init_lock(&simple_lock);
 
 	printf("Decide which algorthm to run:\n");
 	printf(" - S: Sequential\n");
@@ -801,7 +847,7 @@ int main(int argc, char* argv[]) {
 		printf("\nStart Importing Graph\n");
 		start = high_resolution_clock::now();
 		try {
-			graph = importGraphParallel(path.c_str(), false, &n_nodes);
+			graph = importGraphParallel(path.c_str(), undirected, &n_nodes);
 		}
 		catch (const char* msg) {
 			pathFound = false;
@@ -877,187 +923,13 @@ int main(int argc, char* argv[]) {
 		printf("%d\t%d\n", i, (int)duration[i].count());
 	}
 	mean = mean / times;
-	printf("___________________\n\nMean\t%d\n\n", mean);
-
-
-	//// Import the graph from file
-	//const int root = 0;
-	//short int* lev;
-	//int n_nodes = -1;
-	//printf("Start Importing Graph\n");
-	//start = high_resolution_clock::now();
-	//bool* graph = importGraphParallel("RMATg0.txt", false, &n_nodes);
-	//stop = chrono::high_resolution_clock::now();
-	//printf("Done Importing Graph\n");
-	//duration[0] = duration_cast<milliseconds>(stop - start);
-	//printf("Importing Graph: %d ms\n\n", (int)duration[0].count());
-	//t2 = (int)max((double)t2, (double)n_nodes * 0.01);
-
-
-	//printf("\nStart algorithms:\n");
-
-	//start = high_resolution_clock::now();
-	//lev = hybridBFS(graph, n_nodes, root);
-	//stop = chrono::high_resolution_clock::now();
-	//duration = duration_cast<milliseconds>(stop - start);
-	//printf("Hybrid BFS duration: %d ms\n\n", (int)duration.count());
-	//delete[] lev;
-
-	//start = high_resolution_clock::now();
-	//lev = readBasedBFS(graph, n_nodes, root);
-	//stop = chrono::high_resolution_clock::now();
-	//duration = duration_cast<milliseconds>(stop - start);
-	//printf("Read BFS duration: %d ms\n", (int)duration.count());
-	//delete[] lev;
-
-	//start = high_resolution_clock::now();
-	//lev = queueBasedBFS(graph, n_nodes, root);
-	//stop = chrono::high_resolution_clock::now();
-	//duration = duration_cast<milliseconds>(stop - start);
-	//printf("Queue BFS duration: %d ms\n", (int)duration.count());
-	//delete[] lev;
-
-	//start = high_resolution_clock::now();
-	//lev = sequentialBasedBFS(graph, n_nodes, root);
-	//stop = chrono::high_resolution_clock::now();
-	//duration = duration_cast<milliseconds>(stop - start);
-	//printf("Sequential BFS duration: %d ms\n", (int)duration.count());
-
-	//plotLevelTable(lev, n_nodes);
-
-	//delete[] lev;
-
-	//// Hybrid BFS
-	//for (int i = 0; i < 10; i++) {
-
-	//	printf("Start Hybrid BFS: %d of 10\n", i+1);
-	//	start = high_resolution_clock::now();
-	//	lev = hybridBFS(graph, n_nodes, root);
-	//	stop = chrono::high_resolution_clock::now();
-	//	duration[i] = duration_cast<milliseconds>(stop - start);
-
-	//	delete[] lev;
-	//}
-
-	//printf("Hybrid BFS:\nIteration\tTime\n");
-	//int mean = 0;
-	//for (int i = 0; i < 10; i++) {
-	//	mean = mean + (int)duration[i].count();
-	//	printf("%d\t%d\n", i, (int)duration[i].count());
-	//}
-	//mean = mean / 10;
-	//printf("--------------\nmean\t%d\n\n", mean);
-
-	//// Read BFS
-	//for (int i = 0; i < 10; i++) {
-
-	//	printf("Start Read BFS: %d of 10\n", i+1);
-	//	start = high_resolution_clock::now();
-	//	lev = readBasedBFS(graph, n_nodes, root);
-	//	stop = chrono::high_resolution_clock::now();
-	//	duration[i] = duration_cast<milliseconds>(stop - start);
-
-	//	delete[] lev;
-	//}
-
-	//printf("Read BFS:\nIteration\tTime\n");
-	//mean = 0;
-	//for (int i = 0; i < 10; i++) {
-	//	mean = mean + (int)duration[i].count();
-	//	printf("%d\t%d\n", i, (int)duration[i].count());
-	//}
-	//mean = mean / 10;
-	//printf("--------------\nmean\t%d\n\n", mean);
-
-	//// Queue BFS
-	//for (int i = 0; i < 10; i++) {
-
-	//	printf("Start Queue BFS: %d of 10\n", i+1);
-	//	start = high_resolution_clock::now();
-	//	lev = queueBasedBFS(graph, n_nodes, root);
-	//	stop = chrono::high_resolution_clock::now();
-	//	duration[i] = duration_cast<milliseconds>(stop - start);
-
-	//	delete[] lev;
-	//}
-
-	//printf("Queue BFS:\nIteration\tTime\n");
-	//mean = 0;
-	//for (int i = 0; i < 10; i++) {
-	//	mean = mean + (int)duration[i].count();
-	//	printf("%d\t%d\n", i, (int)duration[i].count());
-	//}
-	//mean = mean / 10;
-	//printf("--------------\nmean\t%d\n\n", mean);
-
-	//// Sequential BFS
-	//for (int i = 0; i < 10; i++) {
-
-	//	printf("Start Sequential BFS: %d of 10\n", i+1);
-	//	start = high_resolution_clock::now();
-	//	lev = sequentialBasedBFS(graph, n_nodes, root);
-	//	stop = chrono::high_resolution_clock::now();
-	//	duration[i] = duration_cast<milliseconds>(stop - start);
-
-	//	delete[] lev;
-	//}
-
-	//printf("Sequential BFS:\nIteration\tTime\n");
-	//mean = 0;
-	//for (int i = 0; i < 10; i++) {
-	//	mean = mean + (int)duration[i].count();
-	//	printf("%d\t%d\n", i, (int)duration[i].count());
-	//}
-	//mean = mean / 10;
-	//printf("--------------\nmean\t%d\n\n", mean);
-
-
-	//// Sequential BFS
-	//printf("\nStart Sequential BFS optimized\n");
-	//start = high_resolution_clock::now();
-	//lev = sequentialBasedBFS(graph, n_nodes, root);
-	//stop = chrono::high_resolution_clock::now();
-	//printf("Done Sequential BFS optimized\n");
-	//duration = duration_cast<milliseconds>(stop - start);
-	//printf("Sequential BFS optimized: %d ms\n", (int)duration.count());
-
-	//plotLevelTable(lev, n_nodes);
-
-	//delete[] lev;
-
-
-	//// Queue Parallel BFS
-	//printf("\nStart Parallel BFS queue\n");
-	//start = high_resolution_clock::now();
-	//lev = queueBasedBFS(graph, n_nodes, root);
-	//stop = chrono::high_resolution_clock::now();
-	//printf("Done Parallel BFS queue\n");
-	//duration = duration_cast<milliseconds>(stop - start);
-	//printf("Parallel BFS queue: %d ms\n", (int)duration.count());
-
-	//plotLevelTable(lev, n_nodes);
-
-	//delete[] lev;
-
-
-	//// Read Parallel BFS
-	//printf("\nStart Parallel BFS read\n");
-	//start = high_resolution_clock::now();
-	//lev = readBasedBFS(graph, n_nodes, root);
-	//stop = chrono::high_resolution_clock::now();
-	//printf("Done Parallel BFS read\n");
-	//duration = duration_cast<milliseconds>(stop - start);
-	//printf("Parallel BFS read: %d ms\n", (int)duration.count());
-
-	//plotLevelTable(lev, n_nodes);
-
-	//delete[] lev;
+	printf("___________________\n\nMean\t%d\n", mean);
 
 
 	delete[] graph;
 
-	omp_destroy_lock(&simple_lock);
 
+	// Needed to be able to read the results
 	string noclose;
 	scanf_s("%c", noclose, 50);
 	scanf_s("%c", noclose, 50);
